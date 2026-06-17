@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>數學王國：道館挑戰</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=400;700&family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #1a1a1a;
+            overflow: hidden;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .pixel-font { font-family: 'Press Start 2P', cursive; }
+
+        /* VFX Animations */
+        @keyframes fire-burst { 0% { transform: scale(0); opacity: 1; } 50% { opacity: 0.8; } 100% { transform: scale(3); opacity: 0; } }
+        @keyframes water-burst { 0% { transform: scale(0); opacity: 1; } 50% { opacity: 0.8; } 100% { transform: scale(3); opacity: 0; } }
+        @keyframes thunder-bolt { 0% { height: 0; opacity: 1; } 50% { height: 100%; opacity: 1; } 100% { height: 100%; opacity: 0; } }
+        @keyframes leaf-burst { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 100% { transform: scale(3) rotate(360deg); opacity: 0; } }
+        @keyframes shockwave { 0% { transform: scale(0.1); border-width: 20px; opacity: 1; } 100% { transform: scale(2); border-width: 0px; opacity: 0; } }
+        @keyframes shake-anim { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-15px); } 75% { transform: translateX(15px); } }
+
+        .anim-fire { animation: fire-burst 0.5s ease-out forwards; }
+        .anim-water { animation: water-burst 0.5s ease-out forwards; }
+        .anim-thunder-bolt { animation: thunder-bolt 0.3s ease-out forwards; }
+        .anim-leaf { animation: leaf-burst 0.5s ease-out forwards; }
+        .anim-shockwave { animation: shockwave 0.5s ease-out forwards; }
+
+        /* Pokemon Animations */
+        .monster-idle { animation: float 3s ease-in-out infinite; }
+        .animate-shake { animation: shake-anim 0.3s ease-in-out; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .game-screen {
+            max-width: 600px; margin: 0 auto; height: 100dvh;
+            display: flex; flex-direction: column; background: #2d3748;
+            position: relative; box-shadow: 0 0 40px rgba(0,0,0,0.7);
+        }
+        
+        .hp-container {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(2px);
+            border: 2px solid #fff;
+            border-radius: 8px;
+            padding: 4px 8px;
+            width: 200px; 
+            margin-bottom: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        .hidden-scene { display: none !important; }
+    </style>
+</head>
+<body>
+    <audio id="bg-music" loop src="https://assets.mixkit.co/music/preview/mixkit-games-world-tracks-1319.mp3"></audio>
+
+    <div id="game-container">
+        <div id="screen-intro" class="game-screen bg-gray-900 text-white items-center justify-center p-6 text-center flex flex-col">
+            <button onclick="toggleMusic()" class="absolute top-4 right-4 bg-gray-800 p-2.5 rounded-full border border-gray-600 text-xl z-50">🔊</button>
+            <h1 class="text-3xl md:text-4xl text-yellow-400 pixel-font mb-4 leading-snug drop-shadow-lg animate-pulse">
+                數學王國<br/><span class="text-xl md:text-2xl text-white">三位數讀法挑戰</span>
+            </h1>
+            <p class="text-xs text-gray-400 max-w-xs mb-3">請選擇你的寶可夢夥伴，聆聽正確的「中文讀數魔法（粵音）」擊碎道館守護獸吧！</p>
+            <p class="text-sm text-amber-400 font-bold mb-6">⚠️ 難度升級：每關需擊敗守護獸 6 次才能過關！</p>
+            <div class="text-gray-300 mb-4 font-bold text-sm">請選擇你的出戰夥伴：</div>
+            <div class="grid grid-cols-2 gap-3 w-full max-w-sm" id="starter-pool"></div>
+        </div>
+
+        <div id="screen-battle" class="game-screen hidden-scene" style="background-size: cover; background-position: center;">
+            <div id="timer-tag" class="absolute top-3 left-3 bg-black/60 text-yellow-400 font-mono text-sm px-3 py-1 rounded-full border border-yellow-500 z-40 flex items-center gap-1 shadow-lg">⏱️ 0 秒</div>
+            <button onclick="toggleMusic()" class="absolute top-3 right-32 bg-black/60 text-white p-1 px-2 rounded-full border border-gray-500 text-xs z-50 flex items-center gap-1">🔊 音樂</button>
+            
+            <div id="vfx-overlay" class="absolute inset-0 z-20 flex items-center justify-center pointer-events-none overflow-hidden hidden-scene">
+                <div id="vfx-effect" class="w-16 h-16 opacity-0 rounded-full"></div>
+            </div>
+
+            <div class="flex-1 relative overflow-hidden" id="battle-stage">
+                <div id="gym-title-tag" class="absolute top-3 right-3 bg-blue-900/80 text-white text-[11px] font-bold px-3 py-1 rounded-md border border-blue-400 z-10 shadow">🏰 道館</div>
+                
+                <div id="enemy-sprite-container" class="absolute top-14 right-6 flex flex-col items-end transition-transform duration-100">
+                    <div class="hp-container text-white text-xs font-bold">
+                        <div class="flex justify-between mb-1"><span>敵方守護獸</span><span id="enemy-hp-text">6/6 HP</span></div>
+                        <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden border border-gray-500"><div id="enemy-hp-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 100%"></div></div>
+                    </div>
+                    <img id="enemy-gif" class="w-28 h-28 md:w-36 md:h-36 object-contain drop-shadow-xl monster-idle" src="" />
+                </div>
+
+                <div id="player-sprite-container" class="absolute bottom-4 left-6 flex flex-col items-start transition-transform duration-100">
+                    <img id="player-gif" class="w-28 h-28 md:w-36 md:h-36 object-contain drop-shadow-xl" src="" />
+                    <div class="hp-container text-white text-xs font-bold">
+                        <div class="flex justify-between mb-1"><span id="player-name-lbl">精靈</span><span id="player-hp-text">3/3 HP</span></div>
+                        <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden border border-gray-500"><div id="player-hp-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 100%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 border-t-4 border-yellow-500 p-3 rounded-t-3xl shadow-2xl h-[55%] md:h-[50%] flex flex-col z-30">
+                <div class="bg-gray-800 p-2.5 rounded-lg border border-gray-600 mb-2 h-20 md:h-24 flex items-center justify-center text-center overflow-y-auto">
+                    <span id="msg-box" class="text-white font-bold text-sm md:text-base leading-relaxed px-1">題目載入中...</span>
+                </div>
+                
+                <div class="flex-1 relative" id="control-panel">
+                    <div id="panel-keypad" class="h-full flex flex-col">
+                        <div id="input-display" class="bg-black text-green-400 font-mono text-base md:text-lg p-1.5 rounded mb-1.5 text-right tracking-widest border border-gray-700 h-10 flex items-center justify-end shadow-inner">請按鍵輸入中文讀音_</div>
+                        <div class="grid grid-cols-4 gap-2 flex-1" id="keyboard-grid"></div>
+                        <button onclick="handleAnswer()" class="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-lg shadow-md border-b-4 border-emerald-800 active:border-b-0">💥 發動攻擊 (檢查答案)</button>
+                    </div>
+                    <div id="panel-moves" class="h-full flex flex-col justify-center hidden-scene">
+                        <div class="text-yellow-400 font-bold text-center mb-2 text-xs md:text-sm animate-bounce">🎯 點擊招式釋放技能：</div>
+                        <div class="grid grid-cols-2 gap-2 flex-1 pb-1" id="moves-grid"></div>
+                    </div>
+                    <div id="panel-wait" class="h-full flex items-center justify-center hidden-scene">
+                        <div class="text-gray-400 text-sm md:text-base animate-pulse">⏳ 數據計算與戰鬥處理中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-victory" class="game-screen bg-yellow-600 flex-col items-center justify-center text-white p-6 text-center relative overflow-hidden hidden-scene">
+            <h1 class="text-4xl md:text-5xl pixel-font mb-4 drop-shadow-xl text-yellow-200">VICTORY!</h1>
+            <p class="text-lg font-bold mb-2">🎉 恭喜你制霸所有數學道館！</p>
+            <p class="text-xs text-yellow-100 mb-6">你完美的掌握了三位數的讀法，全王國的人民都為你歡呼！</p>
+            <div class="text-xl font-mono bg-black/40 p-4 rounded-xl border-2 border-yellow-200 mb-8">🏆 總通關耗時: <span id="final-time-lbl" class="text-yellow-300 font-bold">0</span> 秒</div>
+            <button onclick="window.location.reload()" class="bg-white text-yellow-800 px-8 py-3 rounded-full font-bold text-lg shadow-xl border-4 border-yellow-300">再次挑戰</button>
+        </div>
+
+        <div id="screen-gameover" class="game-screen bg-gray-900 flex-col items-center justify-center text-white p-6 text-center hidden-scene">
+            <h1 class="text-4xl pixel-font text-red-500 mb-4 tracking-widest animate-pulse">GAME OVER</h1>
+            <p class="text-sm text-gray-400 max-w-xs mb-8">寶可夢體力耗盡了，吸取數字經驗後下次一定可以通關！</p>
+            <button onclick="window.location.reload()" class="bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-full font-bold text-lg shadow-lg">重新開始 🔄</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 題庫資料 ---
+        const bgImages = {
+            forest: "https://img.freepik.com/free-vector/hand-drawn-flat-design-forest-landscape_23-2149157285.jpg", 
+            city: "https://img.freepik.com/free-vector/nature-landscape-with-road-city-horizon-trees-clouds-sky-summer-scene-with-empty-highway-green-fields-road-sign-town-buildings-vector-cartoon-illustration_107791-21641.jpg", 
+            sky: "https://img.freepik.com/free-vector/blank-sky-night-scene-with-blank-flood-landscape_1308-60757.jpg"
+        };
+
+        const gyms = [
+            { id: 1, monsterId: 150, name: "超夢", title: "神秘森林道館", bg: bgImages.forest },
+            { id: 2, monsterId: 249, name: "洛奇亞", title: "歡樂市區道館", bg: bgImages.city },
+            { id: 3, monsterId: 384, name: "烈空坐", title: "天空之城道館", bg: bgImages.sky }
+        ];
+
+        const questionDeck = [
+            { q: "請輸入數字「246」的中文讀作什麼？", a: "二百四十六" },
+            { q: "請輸入數字「358」的中文讀作什麼？", a: "三百五十八" },
+            { q: "數字「682」應該怎麼唸呢？", a: "六百八十二" },
+            { q: "數字「195」應該怎麼唸呢？", a: "一百九十五" },
+            { q: "請輸入數字「409」的正確讀法：", a: "四百零九" },
+            { q: "請輸入數字「802」的正確讀法：", a: "八百零二" },
+            { q: "數字「503」中間有零，要怎麼唸？", a: "五百零三" },
+            { q: "數字「701」中間有零，要怎麼唸？", a: "七百零一" },
+            { q: "請輸入數字「780」的中文讀法（注意末尾不讀零）：", a: "七百八十" },
+            { q: "請輸入數字「320」的中文讀法：", a: "三百二十" },
+            { q: "數字「920」的尾巴有零，應該讀作什麼？", a: "九百二十" },
+            { q: "數字「460」的尾巴有零，應該讀作什麼？", a: "四百六十" },
+            { q: "請輸入數字「500」的正確中文讀法：", a: "五百" },
+            { q: "請輸入數字「617」的中文讀法（注意十位數的一要讀出來）：", a: "六百一十七" },
+            { q: "數字「800」的尾巴有兩個零，應該讀作什麼？", a: "八百" },
+            { q: "請輸入數字「115」的正確完整讀法：", a: "一百一十五" },
+            { q: "請輸入數字「910」的正確完整讀法：", a: "九百一十" },
+            { q: "數字「306」應該怎麼唸呢？", a: "三百零六" },
+            { q: "數字「250」應該怎麼唸呢？", a: "二百五十" },
+            { q: "數字「107」要怎麼唸？", a: "一百零七" },
+            { q: "請輸入數字「132」的正確完整讀法：", a: "一百三十二" },
+            { q: "請輸入數字「450」的中文讀法：", a: "四百五十" },
+            { q: "數字「604」中間有零，要怎麼唸？", a: "六百零四" },
+            { q: "數字「873」應該怎麼唸呢？", a: "八百七十三" },
+            { q: "數字「200」的正確中文讀法：", a: "二百" },
+            { q: "請輸入數字「999」的正確中文讀法：", a: "九百九十九" }
+        ];
+
+        const moveDatabase = {
+            electric: [{name:"電擊",color:"bg-yellow-500"},{name:"十萬伏特",color:"bg-yellow-600"},{name:"電球",color:"bg-yellow-400"},{name:"打雷",color:"bg-yellow-700"}],
+            fire: [{name:"火花",color:"bg-red-500"},{name:"火焰輪",color:"bg-red-600"},{name:"噴射火焰",color:"bg-red-700"},{name:"大字爆炎",color:"bg-red-800"}],
+            water: [{name:"水槍",color:"bg-blue-500"},{name:"泡沫光線",color:"bg-blue-400"},{name:"衝浪",color:"bg-blue-600"},{name:"水炮",color:"bg-blue-700"}],
+            grass: [{name:"藤鞭",color:"bg-green-500"},{name:"飛葉快刀",color:"bg-green-600"},{name:"能量球",color:"bg-green-400"},{name:"陽光烈焰",color:"bg-green-700"}]
+        };
+
+        const starterPool = [
+            { id: 25, name: "皮卡丘", type: "electric" },
+            { id: 6, name: "噴火龍", type: "fire" },
+            { id: 9, name: "水箭龜", type: "water" },
+            { id: 3, name: "妙蛙花", type: "grass" }
+        ];
+
+        const keys = ["一", "二", "三", "百", "四", "五", "六", "十", "七", "八", "九", "百", "零", "退格", "清除"];
+
+        // --- 狀態變數 ---
+        let selectedPlayer = null;
+        let gymIdx = 0;
+        let deckIdx = 0;
+        let currentInput = "";
+        let playerHP = 3;
+        let enemyHP = 6; 
+        let startTime = 0;
+        let timerInterval = null;
+        let isMuted = false;
+
+        const getSprite = (id, back=false) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${back?'back/':''}${id}.gif`;
+
+        const speakCantonese = (text) => {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); 
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-HK';
+                window.speechSynthesis.speak(utterance);
+            }
+        };
+
+        function toggleMusic() {
+            const audio = document.getElementById('bg-music');
+            if(audio.paused) {
+                audio.play().catch(()=>{});
+                isMuted = false;
+            } else {
+                audio.pause();
+                isMuted = true;
+            }
+            document.querySelectorAll('button').forEach(b => {
+                if(b.innerText.includes('🔊') || b.innerText.includes('🔇')) {
+                    b.innerText = isMuted ? "🔇" : "🔊";
+                }
+            });
+        }
+
+        function initIntro() {
+            const poolContainer = document.getElementById('starter-pool');
+            poolContainer.innerHTML = "";
+            starterPool.forEach(s => {
+                const btn = document.createElement('button');
+                btn.className = "bg-gray-800 p-3 rounded-xl border-2 border-gray-600 hover:border-yellow-400 hover:bg-gray-700 transition active:scale-95 flex flex-col items-center shadow-lg";
+                btn.onclick = () => startGame(s);
+                btn.innerHTML = `
+                    <img src="${getSprite(s.id)}" class="w-16 h-16 object-contain" alt="${s.name}" />
+                    <div class="mt-1 font-bold text-sm text-yellow-300">${s.name}</div>
+                    <div class="text-[10px] text-gray-400">屬性: ${s.type}</div>
+                `;
+                poolContainer.appendChild(btn);
+            });
+
+            const kbGrid = document.getElementById('keyboard-grid');
+            kbGrid.innerHTML = "";
+            keys.forEach((k, idx) => {
+                const btn = document.createElement('button');
+                let btnColor = "bg-gray-700 active:bg-gray-600 border-gray-800";
+                if (k === "退格" || k === "清除") {
+                    btnColor = "bg-amber-700 active:bg-amber-800 border-amber-900";
+                } else if (["百", "十", "零"].includes(k)) {
+                    btnColor = "bg-indigo-700 active:bg-indigo-600 border-indigo-900";
+                }
+                btn.className = `text-white text-lg font-bold rounded-xl shadow border-b-4 active:scale-95 active:border-b-0 transition-all flex items-center justify-center ${btnColor} ${k === "零" ? "col-span-2" : ""}`;
+                btn.innerText = k;
+                btn.onclick = () => handleKeypress(k);
+                kbGrid.appendChild(btn);
+            });
+        }
+
+        function startGame(starter) {
+            selectedPlayer = starter;
+            playerHP = 3;
+            enemyHP = 6; 
+            gymIdx = 0;
+            deckIdx = 0;
+            currentInput = "";
+            
+            document.getElementById('bg-music').play().catch(()=>{});
+            document.getElementById('screen-intro').classList.add('hidden-scene');
+            document.getElementById('screen-battle').classList.remove('hidden-scene');
+
+            startTime = Date.now();
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('timer-tag').innerText = `⏱️ ${elapsed} 秒`;
+            }, 1000);
+
+            loadBattleState();
+        }
+
+        function loadBattleState() {
+            const currentGym = gyms[gymIdx];
+            const currentQ = questionDeck[deckIdx % questionDeck.length];
+
+            document.getElementById('screen-battle').style.backgroundImage = `url(${currentGym.bg})`;
+            document.getElementById('gym-title-tag').innerText = `🏰 ${currentGym.title}`;
+            
+            document.getElementById('player-gif').src = getSprite(selectedPlayer.id, true);
+            document.getElementById('player-name-lbl').innerText = selectedPlayer.name;
+            updateHPDisplay();
+
+            document.getElementById('enemy-gif').src = getSprite(currentGym.monsterId);
+            
+            document.getElementById('msg-box').innerText = currentQ.q;
+            updateInputDisplay();
+            switchMode('keypad');
+        }
+
+        function updateHPDisplay() {
+            document.getElementById('player-hp-text').innerText = `${playerHP}/3 HP`;
+            const pBar = document.getElementById('player-hp-bar');
+            pBar.style.width = `${(playerHP/3)*100}%`;
+            pBar.className = `h-full transition-all duration-300 ${playerHP>2?'bg-green-500':playerHP>1?'bg-yellow-500':'bg-red-500'}`;
+
+            document.getElementById('enemy-hp-text').innerText = `${enemyHP}/6 HP`;
+            const eBar = document.getElementById('enemy-hp-bar');
+            eBar.style.width = `${(enemyHP/6)*100}%`;
+            eBar.className = `h-full transition-all duration-300 ${enemyHP>4?'bg-green-500':enemyHP>2?'bg-yellow-500':'bg-red-500'}`;
+        }
+
+        function handleKeypress(k) {
+            if (k === "退格") {
+                currentInput = currentInput.slice(0, -1);
+            } else if (k === "清除") {
+                currentInput = "";
+            } else {
+                speakCantonese(k);
+                currentInput += k;
+            }
+            updateInputDisplay();
+        }
+
+        function updateInputDisplay() {
+            const display = document.getElementById('input-display');
+            if(currentInput) {
+                display.innerText = currentInput;
+                display.classList.remove('text-gray-600');
+                display.classList.add('text-green-400');
+            } else {
+                display.innerText = "請按鍵輸入中文讀音_";
+                display.classList.remove('text-green-400');
+                display.classList.add('text-gray-600');
+            }
+        }
+
+        function switchMode(mode) {
+            document.getElementById('panel-keypad').classList.add('hidden-scene');
+            document.getElementById('panel-moves').classList.add('hidden-scene');
+            document.getElementById('panel-wait').classList.add('hidden-scene');
+
+            if(mode === 'keypad') document.getElementById('panel-keypad').classList.remove('hidden-scene');
+            if(mode === 'moves') document.getElementById('panel-moves').classList.remove('hidden-scene');
+            if(mode === 'wait') document.getElementById('panel-wait').classList.remove('hidden-scene');
+        }
+
+        function handleAnswer() {
+            const currentQ = questionDeck[deckIdx % questionDeck.length];
+            if(currentInput.trim() === currentQ.a) {
+                speakCantonese("答對了");
+                document.getElementById('msg-box').innerText = "答案正確！敵方防線崩潰，請點擊下方招式給予痛擊！";
+                loadMovePanel();
+                switchMode('moves');
+            } else {
+                speakCantonese("答錯了");
+                shakeElement(document.getElementById('player-sprite-container'));
+                playerHP--;
+                updateHPDisplay();
+                currentInput = "";
+                updateInputDisplay();
+
+                if(playerHP <= 0) {
+                    switchMode('wait');
+                    setTimeout(() => {
+                        clearInterval(timerInterval);
+                        document.getElementById('screen-battle').classList.add('hidden-scene');
+                        document.getElementById('screen-gameover').classList.remove('hidden-scene');
+                    }, 1500);
+                } else {
+                    document.getElementById('msg-box').innerText = `讀音不對喔！正確讀法是「${currentQ.a}」。遭受反擊！`;
+                    switchMode('wait');
+                    setTimeout(() => {
+                        deckIdx++;
+                        loadBattleState();
+                    }, 2500);
+                }
+            }
+        }
+
+        function loadMovePanel() {
+            const grid = document.getElementById('moves-grid');
+            grid.innerHTML = "";
+            const moves = moveDatabase[selectedPlayer.type];
+            moves.forEach(m => {
+                const btn = document.createElement('button');
+                btn.className = `${m.color} text-white rounded-xl font-bold text-base shadow-md border-b-4 border-black/30 active:scale-95 active:border-b-0 transition-all flex items-center justify-center`;
+                btn.innerText = `⚔️ ${m.name}`;
+                btn.onclick = () => triggerAttack(m.name);
+                grid.appendChild(btn);
+            });
+        }
+
+        function triggerAttack(moveName) {
+            switchMode('wait');
+            document.getElementById('msg-box').innerText = `${selectedPlayer.name} 使用了 ${moveName}！`;
+            
+            const overlay = document.getElementById('vfx-overlay');
+            const effect = document.getElementById('vfx-effect');
+            overlay.classList.remove('hidden-scene');
+            
+            // 徹底重塑特效節點類別，避免屬性樣式衝突或卡死
+            effect.className = "w-16 h-16 rounded-full opacity-0";
+            if(selectedPlayer.type === 'electric') effect.classList.add('bg-yellow-300', 'anim-shockwave');
+            if(selectedPlayer.type === 'fire') effect.classList.add('bg-red-500', 'anim-fire');
+            if(selectedPlayer.type === 'water') effect.classList.add('bg-blue-400', 'anim-water');
+            if(selectedPlayer.type === 'grass') effect.classList.add('bg-green-500', 'anim-leaf');
+
+            // 【終極安全機制】：不管動畫有沒有正常結束，強制在 500 毫秒後完成傷害並跳轉下一題！
+            setTimeout(() => {
+                overlay.classList.add('hidden-scene');
+                shakeElement(document.getElementById('enemy-sprite-container'));
+                enemyHP--;
+                updateHPDisplay();
+
+                if(enemyHP <= 0) {
+                    handleGymClear();
+                } else {
+                    document.getElementById('msg-box').innerText = "💥 命中要害！成功造成傷害！";
+                    setTimeout(() => {
+                        deckIdx++;
+                        currentInput = "";
+                        loadBattleState();
+                    }, 1200);
+                }
+            }, 500);
+        }
+
+        function handleGymClear() {
+            const currentGym = gyms[gymIdx];
+            document.getElementById('msg-box').innerText = `🎉 太棒了！${currentGym.name} 倒下了！成功突破此道館！`;
+            
+            if(gymIdx < gyms.length - 1) {
+                setTimeout(() => {
+                    gymIdx++;
+                    enemyHP = 6; 
+                    document.getElementById('msg-box').innerText = `🏁 踏入下一站目的地... ${gyms[gymIdx].title}！`;
+                    setTimeout(() => {
+                        deckIdx++;
+                        currentInput = "";
+                        loadBattleState();
+                    }, 2000);
+                }, 2000);
+            } else {
+                setTimeout(() => {
+                    clearInterval(timerInterval);
+                    const totalSec = Math.floor((Date.now() - startTime) / 1000);
+                    document.getElementById('final-time-lbl').innerText = totalSec;
+                    document.getElementById('screen-battle').classList.add('hidden-scene');
+                    document.getElementById('screen-victory').classList.remove('hidden-scene');
+                }, 2000);
+            }
+        }
+
+        function shakeElement(el) {
+            el.classList.add('animate-shake');
+            setTimeout(() => el.classList.remove('animate-shake'), 300);
+        }
+
+        window.onload = initIntro;
+    </script>
+</body>
+</html>
